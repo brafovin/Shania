@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MineWorld - 3D Survival</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="loading-screen">
+        <div class="loading-content">
+            <h1>MineWorld</h1>
+            <p>Welt wird generiert...</p>
+            <div class="progress-bar"><div id="progress"></div></div>
+        </div>
+    </div>
+
+    <div id="game-container" style="display:none">
+        <canvas id="game-canvas"></canvas>
+
+        <!-- HUD -->
+        <div id="hud">
+            <div id="crosshair">+</div>
+
+            <div id="health-bar">
+                <span>❤️</span>
+                <div class="bar-container">
+                    <div id="health-fill" class="bar-fill health"></div>
+                </div>
+                <span id="health-text">20/20</span>
+            </div>
+
+            <div id="hunger-bar">
+                <span>🍗</span>
+                <div class="bar-container">
+                    <div id="hunger-fill" class="bar-fill hunger"></div>
+                </div>
+                <span id="hunger-text">20/20</span>
+            </div>
+
+            <div id="hotbar">
+                <div class="slot selected" data-slot="0"><div class="slot-icon"></div><span class="slot-count"></span></div>
+                <div class="slot" data-slot="1"><div class="slot-icon"></div><span class="slot-count"></span></div>
+                <div class="slot" data-slot="2"><div class="slot-icon"></div><span class="slot-count"></span></div>
+                <div class="slot" data-slot="3"><div class="slot-icon"></div><span class="slot-count"></span></div>
+                <div class="slot" data-slot="4"><div class="slot-icon"></div><span class="slot-count"></span></div>
+                <div class="slot" data-slot="5"><div class="slot-icon"></div><span class="slot-count"></span></div>
+                <div class="slot" data-slot="6"><div class="slot-icon"></div><span class="slot-count"></span></div>
+                <div class="slot" data-slot="7"><div class="slot-icon"></div><span class="slot-count"></span></div>
+                <div class="slot" data-slot="8"><div class="slot-icon"></div><span class="slot-count"></span></div>
+            </div>
+
+            <div id="selected-item-name"></div>
+            <div id="coords"></div>
+            <div id="day-time"></div>
+        </div>
+
+        <!-- Inventory -->
+        <div id="inventory-screen" style="display:none">
+            <div id="inventory-panel">
+                <h2>Inventar</h2>
+                <div id="inventory-grid"></div>
+                <h3>Crafting</h3>
+                <div id="crafting-area">
+                    <div id="crafting-grid">
+                        <div class="craft-slot" data-pos="0"></div>
+                        <div class="craft-slot" data-pos="1"></div>
+                        <div class="craft-slot" data-pos="2"></div>
+                        <div class="craft-slot" data-pos="3"></div>
+                    </div>
+                    <div id="craft-arrow">➡</div>
+                    <div id="craft-result"></div>
+                    <button id="craft-btn">Herstellen</button>
+                </div>
+                <div id="recipes-list">
+                    <h3>Rezepte</h3>
+                    <div id="recipes-grid"></div>
+                </div>
+                <button id="close-inventory">✖ Schließen</button>
+            </div>
+        </div>
+
+        <!-- Death Screen -->
+        <div id="death-screen" style="display:none">
+            <h1>Du bist gestorben!</h1>
+            <p id="death-message"></p>
+            <button id="respawn-btn">Respawnen</button>
+        </div>
+
+        <!-- Message -->
+        <div id="message-box"></div>
+
+        <!-- Controls Help -->
+        <div id="controls-help">
+            <small>WASD: Bewegen | Leertaste: Springen | E: Inventar | Klick: Abbauen | Rechtsklick: Platzieren | 1-9: Slots | F: Essen</small>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="js/noise.js"></script>
+    <script src="js/blocks.js"></script>
+    <script src="js/world.js"></script>
+    <script src="js/entities.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/crafting.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>
