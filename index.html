@@ -639,8 +639,9 @@ function init() {
     state    = 'playing';
     goalMsg  = ''; goalTeam = null; goalTimer = 0;
     powerUps = [new PowerUp(), new PowerUp()];
-    puTimer  = 0;
-    particles = [];
+    puTimer  = 0; endTimer = 0;
+    particles = []; fireworks = []; confetti = [];
+    celebTimer = 0; chestOpen = 0; badgeAlpha = 0;
 }
 
 function resetPos() {
@@ -672,6 +673,274 @@ function applyPU(player, pu) {
     if (pu.def.id==='supershot') { player.superShot=true; }
     if (pu.def.id==='freeze')    { players.filter(p=>p.team!==player.team).forEach(p=>p.stunned=190); }
     if (pu.def.id==='magnet')    { player.magnet=320; }
+}
+
+// ===== FIREWORK =====
+class Firework {
+    constructor() {
+        this.x = 80 + Math.random() * (W - 160);
+        this.y = H + 10;
+        this.tx = 60 + Math.random() * (W - 120);
+        this.ty = 60 + Math.random() * (H * 0.45);
+        const dx = this.tx - this.x, dy = this.ty - this.y;
+        const d = Math.hypot(dx, dy);
+        const spd = 10 + Math.random() * 5;
+        this.vx = dx / d * spd; this.vy = dy / d * spd;
+        this.trail = []; this.exploded = false; this.parts = [];
+        this.color = ['#f1c40f','#e74c3c','#3498db','#2ecc71','#9b59b6','#ff69b4','#fff'][Math.floor(Math.random()*7)];
+    }
+    update() {
+        if (!this.exploded) {
+            this.trail.push({x:this.x,y:this.y});
+            if (this.trail.length>12) this.trail.shift();
+            this.x+=this.vx; this.y+=this.vy;
+            if (this.y <= this.ty) {
+                this.exploded = true;
+                for (let i=0;i<50;i++) {
+                    const a=Math.random()*Math.PI*2, s=1+Math.random()*7;
+                    this.parts.push(new Particle(this.x,this.y,Math.cos(a)*s,Math.sin(a)*s-1,this.color,2+Math.random()*5));
+                }
+                // Star burst ring
+                for (let i=0;i<12;i++) {
+                    const a=(i/12)*Math.PI*2, s=5+Math.random()*3;
+                    this.parts.push(new Particle(this.x,this.y,Math.cos(a)*s,Math.sin(a)*s,'#fff',3));
+                }
+            }
+        } else {
+            this.parts=this.parts.filter(p=>p.life>0);
+            this.parts.forEach(p=>p.update());
+        }
+    }
+    get done() { return this.exploded && this.parts.length===0; }
+    draw() {
+        if (!this.exploded) {
+            for (let i=0;i<this.trail.length;i++) {
+                ctx.save(); ctx.globalAlpha=(i/this.trail.length)*0.55;
+                ctx.fillStyle='#fff';
+                ctx.beginPath(); ctx.arc(this.trail[i].x,this.trail[i].y,1.5,0,Math.PI*2); ctx.fill();
+                ctx.restore();
+            }
+            ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(this.x,this.y,3,0,Math.PI*2); ctx.fill();
+        } else {
+            this.parts.forEach(p=>p.draw());
+        }
+    }
+}
+
+// ===== CELEBRATION =====
+const AWARDS = [
+    {icon:'👑', name:'WELTMEISTER',       desc:'Unschlagbarer Champion des Feldes!',  color:'#f1c40f'},
+    {icon:'🏆', name:'TORJÄGER-KÖNIG',    desc:'Mehr Tore als jeder andere Spieler!', color:'#e67e22'},
+    {icon:'⚡', name:'BLITZ-CHAMPION',    desc:'Schneller als der Blitz selbst!',     color:'#f1c40f'},
+    {icon:'🌟', name:'SUPERSTAR',         desc:'Ein echter geborener Fußball-Star!',  color:'#fff'},
+    {icon:'💎', name:'DIAMANT-SIEGER',    desc:'Selten, wertvoll und unbesiegbar!',   color:'#aee6f5'},
+    {icon:'🔥', name:'FEUER-MEISTER',     desc:'Heiß wie die Sonne, niemand stoppt dich!', color:'#e74c3c'},
+    {icon:'🦁', name:'LÖWEN-HERZ',        desc:'Mutig, stark und immer bereit!',      color:'#f39c12'},
+    {icon:'🎯', name:'PRÄZISIONS-GOTT',   desc:'Jeder Schuss ein Treffer — perfekt!', color:'#2ecc71'},
+    {icon:'🚀', name:'RAKETENSTÜRMER',    desc:'Unaufhaltsam wie eine Rakete!',       color:'#9b59b6'},
+    {icon:'👾', name:'ROBLOX-LEGENDE',    desc:'Dein Name lebt für immer im Spiel!', color:'#ff69b4'},
+];
+
+let celebTimer = 0, celebWinner = null, celebAward = null;
+let fireworks = [], fwSpawnTimer = 0;
+let chestOpen = 0, badgeAlpha = 0, endTimer = 0;
+let confetti = [];
+
+function initCeleb(winner) {
+    celebWinner = winner;
+    celebAward = AWARDS[Math.floor(Math.random() * AWARDS.length)];
+    celebTimer = 0; chestOpen = 0; badgeAlpha = 0;
+    fireworks = []; fwSpawnTimer = 0;
+    confetti = [];
+    for (let i=0;i<80;i++) {
+        confetti.push({
+            x: Math.random()*W, y: -20 - Math.random()*H,
+            vx:(Math.random()-0.5)*2, vy:1.5+Math.random()*3,
+            color:['#f1c40f','#e74c3c','#3498db','#2ecc71','#9b59b6','#ff69b4','#fff'][Math.floor(Math.random()*7)],
+            sz:6+Math.random()*8, rot:Math.random()*Math.PI*2, rotV:(Math.random()-0.5)*0.15,
+            life:1
+        });
+    }
+}
+
+function drawChest(x, y, openAmt) {
+    const w=90, bh=58, lidH=30;
+    const lidY = y - bh/2 - lidH*openAmt;
+    // Glow when opening
+    if (openAmt > 0.4) {
+        const g = ctx.createRadialGradient(x,y,5,x,y,80+openAmt*60);
+        g.addColorStop(0,'rgba(255,220,80,'+openAmt*0.7+')');
+        g.addColorStop(1,'rgba(255,220,80,0)');
+        ctx.beginPath(); ctx.arc(x,y,140,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+    }
+    // Base shadow
+    ctx.fillStyle='rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.ellipse(x+4,y+bh/2+6,w*0.55,10,0,0,Math.PI*2); ctx.fill();
+    // Base
+    ctx.fillStyle='#7B3F00';
+    ctx.beginPath(); ctx.roundRect(x-w/2,y-bh/2,w,bh,5); ctx.fill();
+    ctx.fillStyle='#5C2E00';
+    ctx.fillRect(x-w/2,y-bh/2,w,10);
+    // Gold straps on base
+    ctx.fillStyle='#d4a017';
+    ctx.fillRect(x-w/2,y-bh/2,w,5);
+    ctx.fillRect(x-w/2,y+bh/2-5,w,5);
+    ctx.fillRect(x-w/2,y-bh/2,5,bh);
+    ctx.fillRect(x+w/2-5,y-bh/2,5,bh);
+    // Gems on base
+    ['#e74c3c','#3498db','#2ecc71'].forEach((c,i) => {
+        ctx.fillStyle=c; const gx=x-20+i*20, gy=y;
+        ctx.beginPath(); ctx.moveTo(gx,gy-6); ctx.lineTo(gx+5,gy); ctx.lineTo(gx,gy+4); ctx.lineTo(gx-5,gy); ctx.closePath(); ctx.fill();
+    });
+    // Lock
+    if (openAmt < 0.3) {
+        ctx.fillStyle='#d4a017';
+        ctx.beginPath(); ctx.arc(x,y,12,Math.PI,0); ctx.fill();
+        ctx.fillRect(x-8,y,16,14);
+        ctx.fillStyle='#7B3F00';
+        ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle='#d4a017'; ctx.fillRect(x-2,y,4,8);
+    }
+    // Lid
+    ctx.fillStyle='#A0522D';
+    ctx.beginPath(); ctx.roundRect(x-w/2-3,lidY,w+6,lidH,5); ctx.fill();
+    ctx.fillStyle='#7B3F00';
+    ctx.fillRect(x-w/2-3,lidY+lidH-8,w+6,8);
+    ctx.fillStyle='#d4a017';
+    ctx.fillRect(x-w/2-3,lidY,w+6,5);
+    ctx.fillRect(x-w/2-3,lidY+lidH-5,w+6,5);
+    ctx.fillRect(x-w/2-3,lidY,5,lidH);
+    ctx.fillRect(x+w/2-2,lidY,5,lidH);
+    // Lid gems
+    ctx.fillStyle='#f1c40f';
+    ctx.beginPath(); ctx.arc(x,lidY+lidH/2,6,0,Math.PI*2); ctx.fill();
+}
+
+function drawBadge(x, y, award, alpha) {
+    ctx.save(); ctx.globalAlpha = alpha;
+    const bw=320, bh=110;
+    ctx.shadowColor=award.color; ctx.shadowBlur=30;
+    // Outer glow ring
+    ctx.strokeStyle=award.color; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.roundRect(x-bw/2-3,y-bh/2-3,bw+6,bh+6,20); ctx.stroke();
+    // Background
+    const grad=ctx.createLinearGradient(x-bw/2,y-bh/2,x+bw/2,y+bh/2);
+    grad.addColorStop(0,'rgba(20,15,40,0.97)'); grad.addColorStop(1,'rgba(10,8,25,0.97)');
+    ctx.fillStyle=grad; ctx.beginPath(); ctx.roundRect(x-bw/2,y-bh/2,bw,bh,18); ctx.fill();
+    ctx.shadowBlur=0;
+    // Stars
+    ctx.fillStyle=award.color; ctx.font='14px Arial'; ctx.textAlign='center';
+    [-130,-110,110,130].forEach(ox => ctx.fillText('★',x+ox,y-bh/2+22));
+    // Big icon
+    ctx.font='56px Arial'; ctx.textBaseline='middle';
+    ctx.fillText(award.icon,x-bw/2+58,y+2);
+    // ÜBERRASCHUNG label
+    ctx.fillStyle='rgba(255,255,255,0.4)'; ctx.font='bold 10px Arial'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('🎁 DEINE ÜBERRASCHUNG', x-bw/2+105, y-bh/2+12);
+    // Award name
+    ctx.fillStyle=award.color; ctx.font='bold 22px Arial'; ctx.textBaseline='middle';
+    ctx.fillText(award.name, x-bw/2+105+95, y-8);
+    ctx.textAlign='center';
+    // Desc
+    ctx.fillStyle='rgba(255,255,255,0.72)'; ctx.font='13px Arial'; ctx.textBaseline='bottom';
+    ctx.fillText(award.desc, x-bw/2+105+95, y+bh/2-14);
+    ctx.restore();
+}
+
+function drawCelebration() {
+    celebTimer++;
+    fwSpawnTimer++;
+    if (fwSpawnTimer > 22) { fireworks.push(new Firework()); fwSpawnTimer=0; }
+    fireworks=fireworks.filter(f=>!f.done);
+    fireworks.forEach(f=>f.update());
+
+    // Dark bg with color tint
+    const wc = celebWinner==='blue' ? 'rgba(20,40,80,0.92)' : 'rgba(80,20,20,0.92)';
+    ctx.fillStyle=wc; ctx.fillRect(0,0,W,H);
+
+    // Fireworks
+    fireworks.forEach(f=>f.draw());
+
+    // Confetti
+    for (const c of confetti) {
+        c.x+=c.vx; c.y+=c.vy; c.rot+=c.rotV;
+        if (c.y > H+20) { c.y=-20; c.x=Math.random()*W; }
+        ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(c.rot);
+        ctx.globalAlpha=0.88; ctx.fillStyle=c.color;
+        ctx.fillRect(-c.sz/2,-c.sz/4,c.sz,c.sz/2);
+        ctx.restore();
+    }
+
+    // Winner banner
+    const bannerAlpha = Math.min(1, celebTimer/40);
+    ctx.save(); ctx.globalAlpha=bannerAlpha;
+    const wColor = celebWinner==='blue' ? '#3498db' : '#e74c3c';
+    ctx.textAlign='center';
+    // Crown glow
+    ctx.shadowColor=wColor; ctx.shadowBlur=40;
+    ctx.font='bold 52px Arial';
+    ctx.fillStyle=wColor;
+    const winnerName = celebWinner==='blue' ? '🔵 BLAU FC' : '🔴 ROT FC';
+    ctx.fillText(winnerName+' GEWINNT!', W/2, 80);
+    ctx.shadowBlur=0;
+    // Score
+    ctx.fillStyle='rgba(255,255,255,0.7)'; ctx.font='bold 26px Arial';
+    ctx.fillText(`${scoreG.blue} : ${scoreG.red}`, W/2, 120);
+    ctx.restore();
+
+    // Chest appears at frame 40, shakes 40-90, opens 90-160
+    if (celebTimer >= 40) {
+        const chestX = W/2, chestY = H/2 + 30;
+        if (celebTimer >= 90) {
+            chestOpen = Math.min(1, (celebTimer-90)/70);
+            if (celebTimer===90) tone(200,'sine',0.05,0.1,400);
+        }
+        // Shake when chest is closed
+        let shakeX=0;
+        if (celebTimer>=40 && celebTimer<90) {
+            const st=celebTimer-40;
+            shakeX = st<10?0 : Math.sin(st*1.2)*Math.min(st-10,8)*0.6;
+            if (celebTimer===55||celebTimer===65||celebTimer===75) sfx('bounce');
+        }
+        ctx.save();
+        ctx.translate(shakeX,0);
+        const chestScale = Math.min(1, (celebTimer-40)/20);
+        ctx.save(); ctx.translate(chestX,chestY); ctx.scale(chestScale,chestScale); ctx.translate(-chestX,-chestY);
+        drawChest(chestX, chestY, chestOpen);
+        ctx.restore(); ctx.restore();
+    }
+
+    // Badge floats up from chest once it opens
+    if (celebTimer >= 140) {
+        badgeAlpha = Math.min(1, (celebTimer-140)/35);
+        const floatY = H/2 - 80 + Math.sin(celebTimer*0.04)*6;
+        drawBadge(W/2, floatY, celebAward, badgeAlpha);
+        // Sparkles around badge
+        if (celebTimer%6===0) {
+            burst(W/2 + (Math.random()-0.5)*180, H/2-80+(Math.random()-0.5)*60,
+                [celebAward.color,'#fff'], 5);
+        }
+    }
+
+    // Extra particles
+    particles=particles.filter(p=>p.life>0);
+    for (const p of particles) { p.update(); p.draw(); }
+
+    // Restart button
+    if (celebTimer > 80) {
+        const btnAlpha = Math.min(1,(celebTimer-80)/30);
+        ctx.save(); ctx.globalAlpha=btnAlpha;
+        const pulse=0.94+Math.sin(Date.now()*0.006)*0.06;
+        ctx.translate(W/2,H-50); ctx.scale(pulse,pulse);
+        ctx.fillStyle='rgba(20,20,40,0.85)';
+        ctx.beginPath(); ctx.roundRect(-100,-20,200,40,20); ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.3)'; ctx.lineWidth=1; ctx.stroke();
+        ctx.fillStyle='#fff'; ctx.font='bold 16px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText('▶  R — NOCHMAL SPIELEN', 0, 1);
+        ctx.restore();
+    }
+
+    if (keys['r']||keys['R']) init();
 }
 
 let frame=0;
@@ -707,17 +976,29 @@ function loop() {
             else { state='playing'; resetPos(); }
         }
     } else if (state==='ended') {
+        endTimer++;
+        // After 2.5s show scores, then transition to celebration if there's a winner
+        if (endTimer === 1 && (scoreG.blue !== scoreG.red)) {
+            // Will initiate celebration after 90 frames
+        }
+        if (endTimer >= 90 && scoreG.blue !== scoreG.red) {
+            const winner = scoreG.blue > scoreG.red ? 'blue' : 'red';
+            initCeleb(winner);
+            state = 'celebration';
+        }
         if (keys['r']||keys['R']) init();
+    } else if (state==='celebration') {
+        // handled below
     }
 
-    for (const pu of powerUps) pu.draw();
-    [...players].sort((a,b)=>a.y-b.y).forEach(p=>p.draw());
-    ball.draw();
-
-    particles = particles.filter(p=>p.life>0);
-    for (const p of particles) { p.update(); p.draw(); }
-
-    drawHUD(scoreG, gameTime, totalTime);
+    if (state !== 'celebration') {
+        for (const pu of powerUps) pu.draw();
+        [...players].sort((a,b)=>a.y-b.y).forEach(p=>p.draw());
+        ball.draw();
+        particles = particles.filter(p=>p.life>0);
+        for (const p of particles) { p.update(); p.draw(); }
+        drawHUD(scoreG, gameTime, totalTime);
+    }
 
     // Goal overlay
     if (state==='goal') {
@@ -736,25 +1017,35 @@ function loop() {
         ctx.restore();
     }
 
-    // End screen
+    // End screen (scores shown before celebration)
     if (state==='ended') {
         ctx.fillStyle='rgba(0,0,0,0.87)'; ctx.fillRect(0,0,W,H);
         ctx.textAlign='center';
         ctx.fillStyle='#f1c40f'; ctx.shadowColor='#f1c40f'; ctx.shadowBlur=28;
-        ctx.font='bold 54px Arial'; ctx.fillText('⏱ ABPFIFF!',W/2,H/2-105);
+        ctx.font='bold 54px Arial'; ctx.fillText('⏱ ABPFIFF!',W/2,H/2-90);
         ctx.shadowBlur=0;
         const w = scoreG.blue>scoreG.red?'🔵 BLAU FC GEWINNT!':scoreG.red>scoreG.blue?'🔴 ROT FC GEWINNT!':'🤝 UNENTSCHIEDEN!';
         const wc = scoreG.blue>scoreG.red?'#3498db':scoreG.red>scoreG.blue?'#e74c3c':'#aaa';
-        ctx.fillStyle=wc; ctx.font='bold 33px Arial'; ctx.fillText(w,W/2,H/2-45);
+        ctx.fillStyle=wc; ctx.font='bold 33px Arial'; ctx.fillText(w,W/2,H/2-35);
         ctx.fillStyle='#3498db'; ctx.font='bold 70px Arial'; ctx.fillText(scoreG.blue,W/2-72,H/2+55);
         ctx.fillStyle='#aaa'; ctx.font='bold 42px Arial'; ctx.fillText('–',W/2,H/2+48);
         ctx.fillStyle='#e74c3c'; ctx.font='bold 70px Arial'; ctx.fillText(scoreG.red,W/2+72,H/2+55);
-        const pulse = 0.93+Math.sin(Date.now()*0.006)*0.07;
-        ctx.save(); ctx.translate(W/2,H/2+120); ctx.scale(pulse,pulse);
-        ctx.fillStyle='#e94560'; ctx.beginPath(); ctx.roundRect(-88,-20,176,40,20); ctx.fill();
-        ctx.fillStyle='#fff'; ctx.font='bold 18px Arial'; ctx.textAlign='center';
-        ctx.fillText('▶  R — NEUSTART',0,7);
-        ctx.restore();
+        if (scoreG.blue===scoreG.red) {
+            const pulse=0.93+Math.sin(Date.now()*0.006)*0.07;
+            ctx.save(); ctx.translate(W/2,H/2+120); ctx.scale(pulse,pulse);
+            ctx.fillStyle='#e94560'; ctx.beginPath(); ctx.roundRect(-88,-20,176,40,20); ctx.fill();
+            ctx.fillStyle='#fff'; ctx.font='bold 18px Arial'; ctx.textAlign='center';
+            ctx.fillText('▶  R — NEUSTART',0,7);
+            ctx.restore();
+        } else {
+            ctx.fillStyle='rgba(255,255,255,0.45)'; ctx.font='16px Arial';
+            ctx.fillText('🎁 Überraschung wird vorbereitet…', W/2, H/2+120);
+        }
+    }
+
+    // Celebration overlay
+    if (state==='celebration') {
+        drawCelebration();
     }
 
     requestAnimationFrame(loop);
